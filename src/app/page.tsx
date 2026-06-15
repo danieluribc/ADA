@@ -1,5 +1,11 @@
+import Image from "next/image";
 import Link from "next/link";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+
+type ProductImageRow = {
+  storage_path: string | null;
+  sort_order: number | null;
+};
 
 type ProductRow = {
   id: string;
@@ -9,56 +15,63 @@ type ProductRow = {
   category: string | null;
   has_sizes: boolean | null;
   is_active: boolean;
+  product_images: ProductImageRow[];
 };
-
-const MOCK_PRODUCTS: ProductRow[] = [
-  {
-    id: "mock-top-deportivo-cero",
-    name: "Top Deportivo Cero",
-    description: "Soporte ligero para entrenamientos de alta intensidad.",
-    price: 125000,
-    category: "TOPS",
-    has_sizes: true,
-    is_active: true,
-  },
-  {
-    id: "mock-leggings-estudio",
-    name: "Leggings Estudio",
-    description: "Silueta limpia con compresión suave y acabado premium.",
-    price: 168000,
-    category: "BOTTOMS",
-    has_sizes: true,
-    is_active: true,
-  },
-  {
-    id: "mock-chaqueta-cortavientos",
-    name: "Chaqueta Cortavientos",
-    description: "Capa exterior minimalista para movimiento urbano.",
-    price: 214000,
-    category: "OUTERWEAR",
-    has_sizes: true,
-    is_active: true,
-  },
-];
 
 async function getFeaturedProducts(): Promise<ProductRow[]> {
   try {
     const supabase = createSupabaseAdminClient();
     const { data, error } = await supabase
       .from("products")
-      .select("id, name, description, price, category, has_sizes, is_active")
+      .select(`
+        id,
+        name,
+        description,
+        price,
+        category,
+        has_sizes,
+        is_active,
+        product_images!left (
+          storage_path,
+          sort_order
+        )
+      `)
       .eq("is_active", true)
+      .order("created_at", { ascending: false })
       .limit(3);
 
-    if (error || !data || data.length === 0) {
-      return MOCK_PRODUCTS;
+    if (error) {
+      console.error("No fue posible obtener los productos destacados de ADA.", error);
+      return [];
     }
 
-    return data.slice(0, 3);
+    return data ?? [];
   } catch (error) {
     console.error("No fue posible obtener los productos destacados de ADA.", error);
-    return MOCK_PRODUCTS;
+    return [];
   }
+}
+
+function getPublicProductImageUrl(storagePath: string | null): string | null {
+  if (!storagePath) {
+    return null;
+  }
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!supabaseUrl) {
+    return null;
+  }
+
+  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/product-images/${storagePath.replace(/^\//, "")}`;
+}
+
+function getFirstProductImageUrl(product: ProductRow): string | null {
+  const images = [...product.product_images].sort(
+    (left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0),
+  );
+
+  return getPublicProductImageUrl(images[0]?.storage_path ?? null);
 }
 
 function formatPrice(priceInCents: number): string {
@@ -72,15 +85,34 @@ function formatPrice(priceInCents: number): string {
 }
 
 function ProductCard({ product }: { product: ProductRow }) {
+  const imageUrl = getFirstProductImageUrl(product);
+
   return (
-    <Link href={`/productos/${product.id}`} className="group">
-      <div className="aspect-[3/4] overflow-hidden bg-surface-container-high grayscale transition-all duration-700 group-hover:grayscale-0">
-        <div className="h-full w-full bg-gradient-to-br from-surface-container-high via-surface-container to-surface-container-lowest transition-transform duration-700 group-hover:scale-105" />
+    <Link href={`/producto/${product.id}`} className="group">
+      <div className="relative aspect-[3/4] overflow-hidden bg-surface-container-high">
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={product.name}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 25vw"
+            className="object-cover grayscale transition-all duration-700 group-hover:grayscale-0"
+            unoptimized
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-surface-container-high via-surface-container to-surface-container-lowest text-primary">
+            <span className="font-display-xl text-5xl tracking-tighter text-primary/20">
+              ADA
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex items-end justify-between gap-4">
-        <div>
-          <p className="font-body-md text-primary">{product.name}</p>
+        <div className="min-w-0">
+          <p className="truncate font-body-md text-primary">
+            {product.name.toUpperCase()}
+          </p>
           <p className="mt-1 font-label-caps text-on-surface-variant tracking-widest">
             {product.category ?? "ADA"}
           </p>
@@ -165,7 +197,7 @@ export default async function HomePage() {
           </div>
         ) : (
           <p className="py-20 text-center font-headline-md text-on-surface-variant">
-            Próximamente: colección deportiva ADA.
+            Nuestra colección está en preparación. Vuelve pronto.
           </p>
         )}
       </section>

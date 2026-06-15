@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import ProductDetailClient, {
   type ProductDetailData,
   type ProductDetailImage,
@@ -21,12 +22,12 @@ type ProductRow = {
   is_active: boolean;
 };
 
-const FALLBACK_VARIANTS: ProductDetailVariant[] = [
-  { id: "respaldo-xs", product_id: "respaldo", size: "XS", stock: 8 },
-  { id: "respaldo-s", product_id: "respaldo", size: "S", stock: 12 },
-  { id: "respaldo-m", product_id: "respaldo", size: "M", stock: 10 },
-  { id: "respaldo-l", product_id: "respaldo", size: "L", stock: 6 },
-];
+type ProductVariantRow = {
+  id: string;
+  product_id: string;
+  size: string;
+  stock: number;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -50,25 +51,31 @@ async function getProductImages(productId: string): Promise<ProductDetailImage[]
   const supabase = createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("product_images")
-    .select("id, product_id, image_url, image_alt, sort_order")
+    .select("id, product_id, storage_path, sort_order")
     .eq("product_id", productId)
     .order("sort_order", { ascending: true, nullsFirst: true });
 
   if (error || !data) {
-    return [createFallbackImage(productId)];
+    return [];
   }
 
-  const validImages = data
-    .filter((image) => typeof image.image_url === "string" && image.image_url.length > 0)
-    .map((image) => ({
-      id: image.id,
-      product_id: image.product_id,
-      image_url: image.image_url,
-      image_alt: image.image_alt,
-      sort_order: image.sort_order,
-    }));
+  const images: ProductDetailImage[] = [];
 
-  return validImages.length > 0 ? validImages : [createFallbackImage(productId)];
+  for (const image of data) {
+    const imageUrl = getPublicProductImageUrl(image.storage_path);
+
+    if (imageUrl) {
+      images.push({
+        id: image.id,
+        product_id: image.product_id,
+        image_url: imageUrl,
+        image_alt: null,
+        sort_order: image.sort_order,
+      });
+    }
+  }
+
+  return images;
 }
 
 async function getProductVariants(
@@ -82,28 +89,26 @@ async function getProductVariants(
     .order("size", { ascending: true });
 
   if (error || !data) {
-    return FALLBACK_VARIANTS;
+    return [];
   }
 
-  const validVariants = data
-    .filter((variant) => typeof variant.size === "string" && variant.size.trim().length > 0)
-    .map((variant) => ({
+  return data
+    .filter((variant: ProductVariantRow) => typeof variant.size === "string" && variant.size.trim().length > 0)
+    .map((variant: ProductVariantRow) => ({
       id: variant.id,
       product_id: variant.product_id,
       size: variant.size.trim().toUpperCase(),
       stock: Number.isFinite(variant.stock) ? variant.stock : 0,
     }))
     .sort((left, right) => left.size.localeCompare(right.size));
-
-  return validVariants.length > 0 ? validVariants : FALLBACK_VARIANTS;
 }
 
-async function getProductDetail(id: string): Promise<ProductDetailData> {
+async function getProductDetail(id: string): Promise<ProductDetailData | null> {
   try {
     const product = await getProduct(id);
 
     if (!product) {
-      return createFallbackProduct(id);
+      return null;
     }
 
     const [images, variants] = await Promise.all([
@@ -122,46 +127,31 @@ async function getProductDetail(id: string): Promise<ProductDetailData> {
     };
   } catch (error) {
     console.error("No fue posible obtener el detalle del producto ADA.", error);
-    return createFallbackProduct(id);
+    return null;
   }
 }
 
-function createFallbackProduct(id: string): ProductDetailData {
-  return {
-    id,
-    name: "Conjunto ADA Respaldo",
-    description:
-      "Producto de respaldo para mantener visible la experiencia ADA cuando el catálogo no está disponible.",
-    category: "RESPALDO",
-    price: 168000,
-    images: [createFallbackImage(id)],
-    variants: FALLBACK_VARIANTS,
-  };
-}
+function getPublicProductImageUrl(storagePath: string | null): string | null {
+  if (!storagePath) {
+    return null;
+  }
 
-function createFallbackImage(productId: string): ProductDetailImage {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200">
-      <rect width="900" height="1200" fill="#eeeeee"/>
-      <rect x="0" y="0" width="900" height="1200" fill="none" stroke="#000000" stroke-width="2"/>
-      <path d="M140 980 C260 820 360 980 480 820 S700 720 780 880" fill="none" stroke="#000000" stroke-width="3"/>
-      <text x="60" y="110" fill="#000000" font-family="Inter, Arial, sans-serif" font-size="42" font-weight="700" letter-spacing="10">ADA</text>
-      <text x="60" y="160" fill="#000000" font-family="Inter, Arial, sans-serif" font-size="18" font-weight="400" letter-spacing="4">DETALLE ADA</text>
-    </svg>
-  `;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 
-  return {
-    id: `${productId}-fallback-image`,
-    product_id: productId,
-    image_url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    image_alt: "Marcador de posición ADA",
-    sort_order: 0,
-  };
+  if (!supabaseUrl) {
+    return null;
+  }
+
+  return `${supabaseUrl.replace(/\/$/, "")}/storage/v1/object/public/product-images/${storagePath.replace(/^\//, "")}`;
 }
 
 export default async function ProductPage({ params }: PageProps) {
   const { id } = await params;
   const product = await getProductDetail(id);
+
+  if (!product) {
+    redirect("/tienda");
+  }
 
   return <ProductDetailClient product={product} />;
 }

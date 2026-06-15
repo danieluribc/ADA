@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { useCart, type CartItem } from "@/context/CartContext";
 
@@ -49,7 +49,7 @@ type CartApiResponse =
   | { ok: false; error: { mensaje: string } };
 
 type CartPageItem = CartApiItem & {
-  imagen_url: string | null;
+  imagen_url: string;
   imagen_alt: string | null;
 };
 
@@ -66,7 +66,7 @@ function formatMoney(cents: number): string {
 function normalizeCartItems(items: CartApiItem[]): CartPageItem[] {
   return items.map((item) => ({
     ...item,
-    imagen_url: item.imagen?.url ?? null,
+    imagen_url: item.imagen?.url ?? "",
     imagen_alt: item.imagen?.texto_alt ?? null,
   }));
 }
@@ -245,13 +245,18 @@ function OrderSummary({
 
 export default function CartPage() {
   const { refreshCart } = useCart();
+  const refreshCartRef = useRef(refreshCart);
   const [items, setItems] = useState<CartPageItem[]>([]);
   const [subtotal, setSubtotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    refreshCartRef.current = refreshCart;
+  }, [refreshCart]);
+
   const loadCart = useCallback(async () => {
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
 
     try {
@@ -265,33 +270,80 @@ export default function CartPage() {
       }
 
       const nextItems = normalizeCartItems(result.datos.items);
+
       setItems(nextItems);
       setSubtotal(result.datos.subtotal);
-      refreshCart(mapCartItemsToContext(result.datos.id, result.datos.items));
+      refreshCartRef.current(mapCartItemsToContext(result.datos.id, result.datos.items));
     } catch (caughtError) {
       const message =
         caughtError instanceof Error
           ? caughtError.message
           : "No fue posible cargar tu bolsa.";
+
       setError(message);
       setItems([]);
       setSubtotal(0);
-      refreshCart([]);
+      refreshCartRef.current([]);
       toast.error(message);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  }, [refreshCart]);
+  }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      void loadCart();
-    }, 0);
+    let isActive = true;
+
+    async function fetchCart() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch("/api/cart", { cache: "no-store" });
+        const result = (await response.json()) as CartApiResponse;
+
+        if (!response.ok || !result.ok) {
+          throw new Error(
+            result.ok ? result.mensaje : "No fue posible cargar tu bolsa.",
+          );
+        }
+
+        if (!isActive) {
+          return;
+        }
+
+        const nextItems = normalizeCartItems(result.datos.items);
+
+        setItems(nextItems);
+        setSubtotal(result.datos.subtotal);
+        refreshCartRef.current(mapCartItemsToContext(result.datos.id, result.datos.items));
+      } catch (caughtError) {
+        if (!isActive) {
+          return;
+        }
+
+        const message =
+          caughtError instanceof Error
+            ? caughtError.message
+            : "No fue posible cargar tu bolsa.";
+
+        setError(message);
+        setItems([]);
+        setSubtotal(0);
+        refreshCartRef.current([]);
+        toast.error(message);
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void fetchCart();
 
     return () => {
-      window.clearTimeout(timeout);
+      isActive = false;
     };
-  }, [loadCart]);
+  }, []);
 
   const totalQuantity = useMemo(
     () => items.reduce((total, item) => total + item.cantidad, 0),
@@ -346,11 +398,11 @@ export default function CartPage() {
     await loadCart();
   }
 
-  if (isLoading) {
+  if (loading) {
     return (
       <main className="flex min-h-[60vh] items-center justify-center px-container-margin py-section-gap">
         <p className="font-label-caps text-on-surface-variant">
-          CARGANDO TU BOLSA...
+          Cargando tu bolsa...
         </p>
       </main>
     );
