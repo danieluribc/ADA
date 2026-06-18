@@ -18,6 +18,9 @@ export async function middleware(request: NextRequest) {
       cookieOptions: {
         name: AUTH_STORAGE_KEY,
         path: "/",
+        sameSite: "lax" as const,
+        secure: process.env.NODE_ENV === "production",
+        domain: undefined,
       },
     }
   );
