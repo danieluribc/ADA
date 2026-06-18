@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import { requireAdminSession } from "@/lib/admin-auth";
 
 export type ProductActionResult =
   | {
@@ -107,6 +108,8 @@ async function rollbackProduct(productId: string) {
 }
 
 export async function createProduct(formData: FormData): Promise<ProductActionResult> {
+  await requireAdminSession();
+
   const name = getFormValue(formData, "name");
   const description = getFormValue(formData, "description");
   const category = getFormValue(formData, "category");
@@ -235,3 +238,105 @@ export async function createProduct(formData: FormData): Promise<ProductActionRe
     };
   }
 }
+
+export async function updateProductActive(
+  productId: string,
+  isActive: boolean,
+): Promise<ProductActionResult> {
+  await requireAdminSession();
+
+  const normalizedProductId = productId.trim();
+
+  if (!normalizedProductId) {
+    return { ok: false, message: "El identificador del producto es requerido." };
+  }
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data: existingProduct, error: fetchError } = await supabase
+      .from("products")
+      .select("id")
+      .eq("id", normalizedProductId)
+      .maybeSingle();
+
+    if (fetchError) {
+      return { ok: false, message: fetchError.message };
+    }
+
+    if (!existingProduct) {
+      return { ok: false, message: "Producto no encontrado." };
+    }
+
+    const { error } = await supabase
+      .from("products")
+      .update({ is_active: isActive })
+      .eq("id", normalizedProductId);
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/admin/productos");
+
+    return {
+      ok: true,
+      message: isActive ? "Producto activado correctamente." : "Producto desactivado correctamente.",
+      productId: normalizedProductId,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No fue posible actualizar el producto.",
+    };
+  }
+}
+
+export async function deleteProduct(productId: string): Promise<ProductActionResult> {
+  await requireAdminSession();
+
+  const normalizedProductId = productId.trim();
+
+  if (!normalizedProductId) {
+    return { ok: false, message: "El identificador del producto es requerido." };
+  }
+
+  try {
+    const supabase = createSupabaseAdminClient();
+    const { data: existingProduct, error: fetchError } = await supabase
+      .from("products")
+      .select("id")
+      .eq("id", normalizedProductId)
+      .maybeSingle();
+
+    if (fetchError) {
+      return { ok: false, message: fetchError.message };
+    }
+
+    if (!existingProduct) {
+      return { ok: false, message: "Producto no encontrado." };
+    }
+
+    const { error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", normalizedProductId);
+
+    if (error) {
+      return { ok: false, message: error.message };
+    }
+
+    revalidatePath("/admin/productos");
+
+    return {
+      ok: true,
+      message: "Producto eliminado correctamente.",
+      productId: normalizedProductId,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : "No fue posible eliminar el producto.",
+    };
+  }
+}
+

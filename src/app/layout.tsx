@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Inter, Noto_Serif } from "next/font/google";
 import { CartProvider } from "@/context/CartContext";
 import LayoutPublico from "@/components/LayoutPublico";
@@ -21,17 +22,25 @@ export const metadata: Metadata = {
   description: "Tienda online de ropa deportiva femenina ADA.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const headersList = await headers();
+  const pathname = headersList.get("x-pathname") ?? "";
+  const shouldRenderPublicShell = !pathname.startsWith("/admin");
+
   return (
     <html lang="es" className={`${inter.variable} ${notoSerif.variable}`}>
       <body className="bg-background text-on-background font-body-md min-h-screen antialiased">
-        <CartProvider>
-          <LayoutPublico>{children}</LayoutPublico>
-        </CartProvider>
+        {shouldRenderPublicShell ? (
+          <CartProvider>
+            <LayoutPublico>{children}</LayoutPublico>
+          </CartProvider>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

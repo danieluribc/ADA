@@ -1,4 +1,5 @@
 import ProductForm from "./ProductForm";
+import ProductActionsCell from "./ProductActionsCell";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
 type ProductRow = {
@@ -70,6 +71,7 @@ export default async function AdminProductosPage() {
               <th className="px-5 py-4 font-label-caps">Tallas</th>
               <th className="px-5 py-4 font-label-caps">Estado</th>
               <th className="px-5 py-4 font-label-caps">Creado</th>
+              <th className="px-5 py-4 font-label-caps">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -114,11 +116,12 @@ export default async function AdminProductosPage() {
                       dateStyle: "medium",
                     }).format(new Date(product.created_at))}
                   </td>
+                  <ProductActionsCell productId={product.id} isActive={product.is_active} />
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-5 py-16 text-center font-headline-md text-on-surface-variant">
+                <td colSpan={7} className="px-5 py-16 text-center font-headline-md text-on-surface-variant">
                   No hay productos registrados.
                 </td>
               </tr>
