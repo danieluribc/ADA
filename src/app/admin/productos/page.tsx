@@ -123,7 +123,7 @@ export default async function AdminProductosPage() {
                       dateStyle: "medium",
                     }).format(new Date(product.created_at))}
                   </td>
-                  <ProductActionsCell productId={product.id} isActive={product.is_active} />
+                  <ProductActionsCell product={product} />
                 </tr>
               ))
             ) : (
