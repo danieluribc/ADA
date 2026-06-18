@@ -1,6 +1,8 @@
+// src/app/admin/productos/page.tsx
 import ProductForm from "./ProductForm";
 import ProductActionsCell from "./ProductActionsCell";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import AdminHeader from "@/components/admin/AdminHeader"; // Importación correcta
 
 type ProductRow = {
   id: string;
@@ -48,20 +50,25 @@ export default async function AdminProductosPage() {
 
   return (
     <main className="min-h-screen bg-background px-container-margin py-section-gap text-on-background">
-      <div className="flex flex-col gap-8 border-b border-primary pb-10 md:flex-row md:items-end md:justify-between">
-        <div>
-          <p className="font-label-caps text-on-surface-variant">ADMIN / ADA</p>
-          <h1 className="mt-3 font-headline-lg text-primary">Productos</h1>
-          <p className="mt-4 max-w-2xl font-body-md text-on-surface-variant">
+
+      {/* CORRECCIÓN: El AdminHeader ahora está dentro del flujo y sustituye al viejo encabezado */}
+      <div className="flex flex-col gap-6">
+        <AdminHeader
+          title="Catálogo de Productos"
+          subtitle="ADA / Inventario de Alta Costura"
+        />
+
+        {/* Dejamos el subtexto descriptivo y el botón para añadir productos alineados */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between pb-6">
+          <p className="max-w-2xl font-body-md text-on-surface-variant">
             Administra el catálogo real de ADA. Los precios se guardan en centavos
             y las imágenes se registran en el bucket público de Supabase.
           </p>
+          <ProductForm />
         </div>
-
-        <ProductForm />
       </div>
 
-      <div className="mt-12 overflow-x-auto border border-primary">
+      <div className="mt-8 overflow-x-auto border border-primary">
         <table className="min-w-full text-left">
           <thead className="bg-primary text-on-primary">
             <tr>

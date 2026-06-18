@@ -1,18 +1,22 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+// src/lib/supabase-admin.ts
+import { createClient } from "@supabase/supabase-js";
 
-// ADVERTENCIA: este archivo SOLO debe ser importado y ejecutado en Server Components o API Routes (Server Side), jamás en archivos con la directiva "use client" para evitar exponer la llave maestra.
-export function createSupabaseAdminClient(): SupabaseClient {
+export function createSupabaseAdminClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // <-- CLAVE CRUCIAL
 
+  // Validamos de inmediato en la terminal si las llaves existen
   if (!supabaseUrl || !serviceRoleKey) {
-    throw new Error("Faltan las variables de entorno de Supabase para el cliente administrador.");
+    console.error(
+      "❌ ERROR CRÍTICO: Falta NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno."
+    );
   }
 
-  return createClient(supabaseUrl, serviceRoleKey, {
+  // Creamos el cliente con la service_role_key para BYPASSEAR el RLS por completo
+  return createClient(supabaseUrl || "", serviceRoleKey || "", {
     auth: {
+      persistSession: false, // Evita conflictos de sesión en el servidor
       autoRefreshToken: false,
-      persistSession: false,
     },
   });
 }
